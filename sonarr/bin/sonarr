@@ -1,0 +1,10 @@
+#!/bin/sh
+
+MONO=$(which mono)
+APKG_PKG_DIR=/usr/local/AppCentral/sonarr
+SONARR=$(realpath ${APKG_PKG_DIR}/lib/NzbDrone.exe)
+
+exec ${MONO} --debug ${SONARR} \
+  /data=${APKG_PKG_DIR}/etc \
+  /nobrowser \
+  "$@"
