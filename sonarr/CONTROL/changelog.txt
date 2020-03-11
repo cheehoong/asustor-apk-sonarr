@@ -1,5 +1,3 @@
-sonarr (2.0.0.3953-1)
+sonarr (3.0.3)
 
-  * New upstream release.
-
- -- Fathi Boudra <fboudra+adm@gmail.com>  Tue, 19 Apr 2016 11:29:56 +0200
+  * New upstream release base on sonarrV3.
