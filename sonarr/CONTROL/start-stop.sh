@@ -1,78 +1,88 @@
 #!/bin/sh
 
-. /etc/script/lib/command.sh
+. /usr/local/AppCentral/sonarr/CONTROL/env.sh
 
-. /lib/lsb/init-functions
+PID=${PKG_CONF}/${PKG_PID}
+CHUID=${DAEMON_USER}
+# Shadow mono, see bin/mono
+DAEMON="$PKG_BIN_PATH/mono"
+SONARR="${PKG_PATH}/Sonarr/NzbDrone.exe"
 
-MONO=$(which mono)
-APKG_PKG_DIR=/usr/local/AppCentral/sonarr
 
-USERNAME=admin
+start_daemon() {
+    # Set umask to create files with world r/w
+    umask 0
 
-DAEMON_OPTS=""
-
-PATH=${APKG_PKG_DIR}/bin/:${PATH}
-DESC="smart PVR for newsgroup and bittorrent users"
-NAME=sonarr
-DAEMON=$(which $NAME)
-PIDFILE=/var/run/$NAME.pid
-
-# libmediainfo and libzen
-export LD_LIBRARY_PATH=${APKG_PKG_DIR}/lib:$LD_LIBRARY_PATH
-
-[ -x "$DAEMON" ] || exit 0
-
-do_start() {
-    RETVAL=1
-
-    if [ -e ${PIDFILE} ]; then
-        if ! kill -0 $(cat ${PIDFILE}) &> /dev/null; then
-            rm -f $PIDFILE ${APKG_PKG_DIR}/etc/*.pid
-        fi
-    fi
-
-    if pgrep -f "^${MONO} --debug $(realpath ${APKG_PKG_DIR})" > /dev/null 2>&1; then
-        log_progress_msg "(already running?)"
-    else
-        start-stop-daemon --chuid $USERNAME --start --pidfile $PIDFILE \
-            --make-pidfile --exec $DAEMON --background -- $DAEMON_OPTS
-        RETVAL="$?"
-    fi
-
-    log_end_msg $RETVAL
+    start-stop-daemon -S --background --quiet --chuid "${CHUID}" --user "${USER}" --exec "$DAEMON" -- "$SONARR" /data="$PKG_CONF"
 }
 
-do_stop() {
-    RETVAL=1
+stop_daemon() {
+    start-stop-daemon -K --quiet --user "${USER}" --pidfile "${PID}"
 
-    if ! pgrep -f "^${MONO} --debug $(realpath ${APKG_PKG_DIR})" > /dev/null 2>&1; then
-        log_progress_msg "(not running?)"
-    else
-        start-stop-daemon --stop --quiet --retry 15 --pidfile $PIDFILE
-        RETVAL="$?"
+    wait_for_status 1 20
+
+    if [ $? -eq 1 ]; then
+        echo "Taking too long, killing ${NAME}..."
+        start-stop-daemon -K --signal 9 --quiet --user "${USER}" --pidfile "${PID}"
     fi
-
-    # Many daemons don't delete their pidfiles when they exit.
-    rm -f $PIDFILE ${APKG_PKG_DIR}/etc/*.pid
-
-    log_end_msg "$RETVAL"
 }
 
-case "$1" in
+daemon_status() {
+    start-stop-daemon -K --quiet --test --user "${USER}" --pidfile "${PID}"
+    RETVAL=$?
+    [ ${RETVAL} -eq 0 ] || return 1
+}
+
+wait_for_status() {
+    counter=$2
+    while [ "$counter" -gt 0 ]; do
+        daemon_status
+        [ $? -eq "$1" ] && return
+        counter=$(( counter - 1 ))
+        sleep 1
+    done
+    return 1
+}
+
+case $1 in
     start)
-        echo "Starting $DESC" "$NAME..."
-        do_start
-    ;;
+        if daemon_status; then
+            echo "${NAME} is already running"
+        else
+            echo "Starting ${NAME}..."
+            start_daemon
+        fi
+        ;;
 
     stop)
-        echo "Stopping $DESC $NAME..."
-        do_stop
-    ;;
-
+        if daemon_status; then
+            echo "Stopping ${NAME}..."
+            stop_daemon
+        else
+            echo "${NAME} is not running"
+        fi
+        ;;
+    restart)
+        if daemon_status; then
+            echo "Stopping ${NAME}..."
+            stop_daemon
+        fi
+        echo "Starting ${NAME}..."
+        start_daemon
+        ;;
+    status)
+        if daemon_status; then
+            echo "${NAME} is running"
+            exit 0
+        else
+            echo "${NAME} is not running"
+            exit 1
+        fi
+        ;;
     *)
-        echo "start-stop called with unknown argument \`$1'" >&2
-        exit 3
-    ;;
+        echo "usage: $0 {start|stop|restart|status}"
+        exit 1
+        ;;
 esac
 
 exit 0

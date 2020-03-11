@@ -1,21 +1,28 @@
 #!/bin/sh
-# pre-install script for sonarr
 
-set -e
+if [ -z "$APKG_PKG_DIR" ]; then
+	PKG_DIR=/usr/local/AppCentral/sonarr
+else
+	PKG_DIR=$APKG_PKG_DIR
+fi
 
-APKG_PKG_DIR=/usr/local/AppCentral/sonarr
+case "${APKG_PKG_STATUS}" in
+	install)
+		;;
+	upgrade)
+		# Source env variables
+		. "${PKG_DIR}/CONTROL/env.sh"
 
-case "$APKG_PKG_STATUS" in
-    install)
-    ;;
+		# Back up configuration
+		rsync -ra --exclude "config_base.xml" "$PKG_CONF/" "$APKG_TEMP_DIR/config/"
 
-    upgrade)
-    ;;
-
-    *)
-        echo "pre-install called with unknown argument \`$1'" >&2
-        exit 1
-    ;;
+		# Back up application
+		if [ -d "$PKG_DIR/Sonarr" ]; then
+			cp -af "$PKG_DIR/Sonarr" "$APKG_TEMP_DIR/"
+		fi
+		;;
+	*)
+		;;
 esac
 
 exit 0
